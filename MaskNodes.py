@@ -969,7 +969,63 @@ class PasteByMask:
                 else:
                     paste_mask = torch.min(pasting_alpha, mask[i]).unsqueeze(2).repeat(1, 1, 4)
                 result[image_index] = pasting * paste_mask + result[image_index] * (1. - paste_mask)
+
         return (result,)
+    
+
+class MergeByMask:
+    """
+    Merge `image_to_paste` onto `image_base` using `mask` to determine the location.
+    """
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image_base": ("IMAGE",),
+                "image_to_paste": ("IMAGE",),
+                "mask": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "merge"
+
+    CATEGORY = "Masquerade Nodes"
+
+    def merge(self, image_base, image_to_paste, mask):
+        image_to_paste = tensor2rgba(image_to_paste)
+        B, H, W, C = image_to_paste.shape
+
+        image_base = tensor2rgba(image_base)
+        # batchify the image_base tensor
+        if image_base.shape[0] == 1:
+            image_base = image_base.repeat(B, 1, 1, 1)
+        else:
+            raise ValueError(
+                "image_base must be a single image.\n"
+                f"Here: #(image_base)={image_base.shape[0]}."
+            )
+        if image_base.shape[1:] != torch.Size([H,W,C]):
+            raise ValueError(
+                "image_base must have the same format as image_to_paste.\n"
+                f"Here: image_base -> {tuple(image_base.shape[1:])}; image_to_paste -> {(H,W,C)}."
+            )
+
+        mask = tensor2mask(mask)
+        if mask.shape[1:] != torch.Size([H, W]):
+            raise ValueError(
+                "mask must have the same size as image_base (and image_to_paste).\n"
+                f"Here: mask -> {tuple(mask.shape[1:])}; base_image -> {(H, W)}."
+            )
+        mask = mask.unsqueeze(-1).repeat(B, 1, 1, 4)
+            
+        result = mask * image_to_paste + (1-mask) * image_base
+
+        return (result,)
+
 
 class GetImageSize:
     def __init__(self):
@@ -1333,6 +1389,7 @@ NODE_CLASS_MAPPINGS = {
     "Mask To Region": MaskToRegion,
     "Cut By Mask": CutByMask,
     "Paste By Mask": PasteByMask,
+    "Merge By Mask": MergeByMask,
     "Get Image Size": GetImageSize,
     "Change Channel Count": ChangeChannelCount,
     "Constant Mask": ConstantMask,
@@ -1358,6 +1415,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Mask To Region": "Mask To Region",
     "Cut By Mask": "Cut By Mask",
     "Paste By Mask": "Paste By Mask",
+    "Merge By Mask": "Merge By Mask",
     "Get Image Size": "Get Image Size",
     "Change Channel Count": "Change Channel Count",
     "Constant Mask": "Constant Mask",
